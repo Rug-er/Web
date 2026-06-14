@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Discord Bot Control Panel</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <span class="logo">🤖</span>
+        <div>
+          <h1>Bot Control Panel</h1>
+          <p class="subtitle">Edit your bot. It updates itself live.</p>
+        </div>
+      </div>
+      <div id="botStatus" class="status-pill status-unknown">
+        <span class="dot"></span><span class="label">Checking…</span>
+      </div>
+    </header>
+
+    <main>
+      <form id="settingsForm">
+        <section class="card">
+          <h2>Identity &amp; Presence</h2>
+          <div class="grid">
+            <label>
+              Bot display name
+              <input type="text" name="botName" maxlength="100" />
+            </label>
+            <label>
+              Online status
+              <select name="status">
+                <option value="online">Online</option>
+                <option value="idle">Idle</option>
+                <option value="dnd">Do Not Disturb</option>
+                <option value="invisible">Invisible</option>
+              </select>
+            </label>
+            <label>
+              Activity type
+              <select name="activityType">
+                <option>Playing</option>
+                <option>Listening</option>
+                <option>Watching</option>
+                <option>Competing</option>
+                <option>Streaming</option>
+              </select>
+            </label>
+            <label>
+              Activity text
+              <input type="text" name="activityName" maxlength="128" placeholder="e.g. with the control panel" />
+            </label>
+            <label class="stream-only">
+              Stream URL (Streaming only)
+              <input type="text" name="streamUrl" maxlength="300" placeholder="https://twitch.tv/..." />
+            </label>
+          </div>
+        </section>
+
+        <section class="card">
+          <h2>Commands</h2>
+          <div class="grid">
+            <label>
+              Command prefix
+              <input type="text" name="prefix" maxlength="5" placeholder="!" />
+            </label>
+          </div>
+          <p class="hint">Placeholders you can use in responses: <code>{user}</code> <code>{username}</code> <code>{server}</code></p>
+          <div id="commandList" class="command-list"></div>
+          <button type="button" id="addCommand" class="btn-secondary">+ Add command</button>
+        </section>
+
+        <section class="card">
+          <h2>Welcome Message</h2>
+          <div class="grid">
+            <label class="checkbox-row">
+              <input type="checkbox" name="welcomeEnabled" />
+              Greet new members
+            </label>
+            <label>
+              Welcome channel ID
+              <input type="text" name="welcomeChannelId" maxlength="25" placeholder="123456789012345678" />
+            </label>
+          </div>
+          <label class="full">
+            Message
+            <textarea name="welcomeMessage" rows="2" maxlength="1000" placeholder="Welcome {user} to {server}!"></textarea>
+          </label>
+        </section>
+
+        <div class="actions">
+          <button type="submit" class="btn-primary">Save &amp; apply live</button>
+          <span id="saveMsg" class="save-msg"></span>
+        </div>
+      </form>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>
