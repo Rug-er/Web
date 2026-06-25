@@ -1,102 +1,542 @@
-<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Discord Bot Control Panel</title>
-    <link rel="stylesheet" href="styles.css" />
-  </head>
-  <body>
-    <header class="topbar">
-      <div class="brand">
-        <span class="logo">🤖</span>
-        <div>
-          <h1>Bot Control Panel</h1>
-          <p class="subtitle">Edit your bot. It updates itself live.</p>
-        </div>
+// ============================================================
+//  APP STATE
+// ============================================================
+const App = (() => {
+  // Seed default accounts in localStorage if not present
+  const ACCOUNTS_KEY = 'rg_accounts';
+  const SESSION_KEY  = 'rg_session';
+  const CONTENT_KEY  = 'rg_content';
+  const JOBS_KEY     = 'rg_jobs';
+
+  function initAccounts() {
+    if (!localStorage.getItem(ACCOUNTS_KEY)) {
+      const defaults = [
+        { username: 'Ruger', password: 'Rug123', role: 'admin', created: new Date().toISOString() }
+      ];
+      localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(defaults));
+    }
+  }
+
+  function getAccounts() {
+    return JSON.parse(localStorage.getItem(ACCOUNTS_KEY) || '[]');
+  }
+  function saveAccounts(accs) {
+    localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(accs));
+  }
+
+  function getSession() {
+    const s = sessionStorage.getItem(SESSION_KEY);
+    return s ? JSON.parse(s) : null;
+  }
+  function setSession(user) {
+    sessionStorage.setItem(SESSION_KEY, JSON.stringify(user));
+  }
+  function clearSession() {
+    sessionStorage.removeItem(SESSION_KEY);
+  }
+
+  // Default site content
+  const DEFAULT_CONTENT = {
+    mission: {
+      hero: 'Our Mission',
+      sub: 'Driving excellence through innovation, integrity, and dedication to our community.',
+      body1: 'We are committed to building a future where technology and human potential converge. Our team works tirelessly to develop solutions that make a meaningful impact on everyday lives.',
+      body2: 'Our core values — transparency, accountability, and continuous improvement — guide every decision we make. We believe that the best organizations are ones that put people first, both internally and in the communities they serve.',
+      value1: 'Integrity', value1d: 'We act with honesty and hold ourselves accountable in everything we do.',
+      value2: 'Innovation', value2d: 'We embrace new ideas and foster creative problem-solving at every level.',
+      value3: 'Community',  value3d: 'We invest in the people and places that make our work meaningful.',
+      value4: 'Excellence', value4d: 'We pursue the highest standards in every product, service, and interaction.',
+    },
+    about: {
+      hero: 'About Us',
+      sub: 'Learn who we are, what we do, and why it matters.',
+      intro: 'Founded with a passion for meaningful work, our organization has grown into a trusted partner for businesses and individuals alike. We combine deep expertise with a people-first philosophy to deliver results that last.',
+      s2title: 'What We Do',
+      s2body: 'We provide end-to-end solutions across strategy, technology, and operations. From early-stage consulting to full-scale implementation, our teams bring the right skills to every challenge.',
+      s3title: 'Our History',
+      s3body: 'Starting as a small team with big ambitions, we have grown through client trust, talented people, and relentless focus. Each chapter of our story has been defined by the relationships we have built along the way.',
+      stat1: '10+', stat1l: 'Years of Experience',
+      stat2: '500+', stat2l: 'Projects Completed',
+      stat3: '98%', stat3l: 'Client Satisfaction',
+    },
+    policy: {
+      hero: 'Company Policy',
+      sub: 'Our policies ensure a safe, fair, and professional environment for everyone.',
+      updated: 'Last updated: January 1, 2025',
+    }
+  };
+
+  function getContent() {
+    const stored = localStorage.getItem(CONTENT_KEY);
+    if (stored) return JSON.parse(stored);
+    return JSON.parse(JSON.stringify(DEFAULT_CONTENT));
+  }
+  function saveContent(c) {
+    localStorage.setItem(CONTENT_KEY, JSON.stringify(c));
+  }
+
+  // Jobs
+  const DEFAULT_JOBS = [
+    { id: 1, title: 'Senior Software Engineer', dept: 'Engineering', type: 'Full-time', location: 'Remote', desc: 'Build scalable backend systems and contribute to our core platform.' },
+    { id: 2, title: 'Product Designer', dept: 'Design', type: 'Full-time', location: 'Hybrid', desc: 'Shape user experiences across our product suite with a focus on accessibility.' },
+    { id: 3, title: 'Operations Analyst', dept: 'Operations', type: 'Part-time', location: 'On-site', desc: 'Support day-to-day operations and drive process improvements.' },
+  ];
+
+  function getJobs() {
+    const stored = localStorage.getItem(JOBS_KEY);
+    if (stored) return JSON.parse(stored);
+    return JSON.parse(JSON.stringify(DEFAULT_JOBS));
+  }
+  function saveJobs(jobs) {
+    localStorage.setItem(JOBS_KEY, JSON.stringify(jobs));
+  }
+
+  return { initAccounts, getAccounts, saveAccounts, getSession, setSession, clearSession, getContent, saveContent, getJobs, saveJobs };
+})();
+
+// ============================================================
+//  UTILITY
+// ============================================================
+function showToast(msg, type = '') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast' + (type ? ' toast-' + type : '');
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2800);
+}
+
+function showPage(id) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  const page = document.getElementById(id);
+  if (page) page.classList.add('active');
+  // update nav active state
+  document.querySelectorAll('.navbar-links a[data-page]').forEach(a => {
+    a.classList.toggle('active', a.dataset.page === id);
+  });
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function updateNavbar() {
+  const session = App.getSession();
+  const navLinks = document.getElementById('navLinks');
+  const navRight = document.getElementById('navRight');
+
+  if (!session) {
+    navLinks.innerHTML = '';
+    navRight.innerHTML = `<button class="btn btn-primary btn-sm" onclick="showPage('login-page')">Log In</button>`;
+    return;
+  }
+
+  navLinks.innerHTML = `
+    <a href="#" data-page="mission-page" onclick="nav('mission-page')">Mission</a>
+    <a href="#" data-page="about-page"   onclick="nav('about-page')">About</a>
+    <a href="#" data-page="careers-page" onclick="nav('careers-page')">Careers</a>
+    <a href="#" data-page="policy-page"  onclick="nav('policy-page')">Policy</a>
+    ${session.role === 'admin' ? `<a href="#" data-page="admin-page" onclick="nav('admin-page')">⚙ Admin</a>` : ''}
+  `;
+
+  const badge = session.role === 'admin' ? 'badge-admin' : 'badge-user';
+  const label = session.role === 'admin' ? '★ Admin' : 'Staff';
+  navRight.innerHTML = `
+    <span class="${badge}">${label}: ${session.username}</span>
+    <button class="btn btn-outline btn-sm" onclick="logout()">Log Out</button>
+  `;
+}
+
+function nav(pageId) {
+  const session = App.getSession();
+  if (!session && pageId !== 'login-page') {
+    showPage('login-page'); return;
+  }
+  if (pageId === 'admin-page' && session?.role !== 'admin') {
+    showToast('Admin access only.', 'error'); return;
+  }
+  if (pageId === 'mission-page') renderMission();
+  if (pageId === 'about-page')   renderAbout();
+  if (pageId === 'careers-page') renderCareers();
+  if (pageId === 'policy-page')  renderPolicy();
+  if (pageId === 'admin-page')   renderAdmin();
+  showPage(pageId);
+  updateNavbar();
+}
+
+function logout() {
+  App.clearSession();
+  updateNavbar();
+  showPage('login-page');
+  showToast('Logged out successfully.');
+}
+
+// ============================================================
+//  LOGIN
+// ============================================================
+function handleLogin(e) {
+  e.preventDefault();
+  const username = document.getElementById('loginUser').value.trim();
+  const password = document.getElementById('loginPass').value;
+  const errEl = document.getElementById('loginError');
+  const accounts = App.getAccounts();
+  const found = accounts.find(a => a.username === username && a.password === password);
+  if (!found) {
+    errEl.textContent = 'Incorrect username or password.';
+    errEl.classList.add('show');
+    return;
+  }
+  errEl.classList.remove('show');
+  App.setSession({ username: found.username, role: found.role });
+  updateNavbar();
+  renderMission();
+  showPage('mission-page');
+  showToast(`Welcome back, ${found.username}!`, 'success');
+}
+
+function continueAsGuest() {
+  App.setSession({ username: 'Guest', role: 'guest' });
+  updateNavbar();
+  renderMission();
+  showPage('mission-page');
+  showToast('Continuing as guest — read-only access.');
+}
+
+// ============================================================
+//  MISSION PAGE
+// ============================================================
+function renderMission() {
+  const c = App.getContent().mission;
+  document.getElementById('missionHero').textContent = c.hero;
+  document.getElementById('missionSub').textContent = c.sub;
+  document.getElementById('missionBody1').textContent = c.body1;
+  document.getElementById('missionBody2').textContent = c.body2;
+  document.getElementById('val1Title').textContent = c.value1;
+  document.getElementById('val1Desc').textContent  = c.value1d;
+  document.getElementById('val2Title').textContent = c.value2;
+  document.getElementById('val2Desc').textContent  = c.value2d;
+  document.getElementById('val3Title').textContent = c.value3;
+  document.getElementById('val3Desc').textContent  = c.value3d;
+  document.getElementById('val4Title').textContent = c.value4;
+  document.getElementById('val4Desc').textContent  = c.value4d;
+}
+
+// ============================================================
+//  ABOUT PAGE
+// ============================================================
+function renderAbout() {
+  const c = App.getContent().about;
+  document.getElementById('aboutHero').textContent  = c.hero;
+  document.getElementById('aboutSub').textContent   = c.sub;
+  document.getElementById('aboutIntro').textContent = c.intro;
+  document.getElementById('about2Title').textContent = c.s2title;
+  document.getElementById('about2Body').textContent  = c.s2body;
+  document.getElementById('about3Title').textContent = c.s3title;
+  document.getElementById('about3Body').textContent  = c.s3body;
+  document.getElementById('stat1val').textContent = c.stat1;
+  document.getElementById('stat1lbl').textContent = c.stat1l;
+  document.getElementById('stat2val').textContent = c.stat2;
+  document.getElementById('stat2lbl').textContent = c.stat2l;
+  document.getElementById('stat3val').textContent = c.stat3;
+  document.getElementById('stat3lbl').textContent = c.stat3l;
+}
+
+// ============================================================
+//  CAREERS PAGE
+// ============================================================
+function renderCareers() {
+  const jobs = App.getJobs();
+  const list = document.getElementById('jobList');
+  if (!jobs.length) {
+    list.innerHTML = '<p class="no-jobs">No open positions at this time. Check back soon!</p>';
+    return;
+  }
+  list.innerHTML = jobs.map(j => `
+    <div class="job-card">
+      <div class="job-icon">💼</div>
+      <div class="job-info">
+        <h3>${j.title}</h3>
+        <p>${j.desc}</p>
+        <span class="tag">${j.dept}</span>
+        <span class="tag">${j.type}</span>
+        <span class="tag">${j.location}</span>
       </div>
-      <div id="botStatus" class="status-pill status-unknown">
-        <span class="dot"></span><span class="label">Checking…</span>
+      <div class="apply-btn">
+        <button class="btn btn-primary btn-sm" onclick="applyJob('${j.title}')">Apply</button>
       </div>
-    </header>
+    </div>
+  `).join('');
+}
 
-    <main>
-      <form id="settingsForm">
-        <section class="card">
-          <h2>Identity &amp; Presence</h2>
-          <div class="grid">
-            <label>
-              Bot display name
-              <input type="text" name="botName" maxlength="100" />
-            </label>
-            <label>
-              Online status
-              <select name="status">
-                <option value="online">Online</option>
-                <option value="idle">Idle</option>
-                <option value="dnd">Do Not Disturb</option>
-                <option value="invisible">Invisible</option>
-              </select>
-            </label>
-            <label>
-              Activity type
-              <select name="activityType">
-                <option>Playing</option>
-                <option>Listening</option>
-                <option>Watching</option>
-                <option>Competing</option>
-                <option>Streaming</option>
-              </select>
-            </label>
-            <label>
-              Activity text
-              <input type="text" name="activityName" maxlength="128" placeholder="e.g. with the control panel" />
-            </label>
-            <label class="stream-only">
-              Stream URL (Streaming only)
-              <input type="text" name="streamUrl" maxlength="300" placeholder="https://twitch.tv/..." />
-            </label>
-          </div>
-        </section>
+function applyJob(title) {
+  const session = App.getSession();
+  if (!session || session.role === 'guest') {
+    showToast('Please log in to apply for positions.', 'error');
+    return;
+  }
+  showToast(`Application for "${title}" submitted! We'll be in touch.`, 'success');
+}
 
-        <section class="card">
-          <h2>Commands</h2>
-          <div class="grid">
-            <label>
-              Command prefix
-              <input type="text" name="prefix" maxlength="5" placeholder="!" />
-            </label>
-          </div>
-          <p class="hint">Placeholders you can use in responses: <code>{user}</code> <code>{username}</code> <code>{server}</code></p>
-          <div id="commandList" class="command-list"></div>
-          <button type="button" id="addCommand" class="btn-secondary">+ Add command</button>
-        </section>
+// ============================================================
+//  POLICY PAGE
+// ============================================================
+function renderPolicy() {
+  const c = App.getContent().policy;
+  document.getElementById('policyHero').textContent = c.hero;
+  document.getElementById('policySub').textContent  = c.sub;
+  document.getElementById('policyUpdated').textContent = c.updated;
+}
 
-        <section class="card">
-          <h2>Welcome Message</h2>
-          <div class="grid">
-            <label class="checkbox-row">
-              <input type="checkbox" name="welcomeEnabled" />
-              Greet new members
-            </label>
-            <label>
-              Welcome channel ID
-              <input type="text" name="welcomeChannelId" maxlength="25" placeholder="123456789012345678" />
-            </label>
-          </div>
-          <label class="full">
-            Message
-            <textarea name="welcomeMessage" rows="2" maxlength="1000" placeholder="Welcome {user} to {server}!"></textarea>
-          </label>
-        </section>
+// ============================================================
+//  ADMIN PANEL
+// ============================================================
+let adminTab = 'accounts';
 
-        <div class="actions">
-          <button type="submit" class="btn-primary">Save &amp; apply live</button>
-          <span id="saveMsg" class="save-msg"></span>
-        </div>
-      </form>
-    </main>
+function renderAdmin() {
+  switchAdminTab(adminTab);
+}
 
-    <script src="app.js"></script>
-  </body>
-</html>
+function switchAdminTab(tab) {
+  adminTab = tab;
+  document.querySelectorAll('.admin-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+  document.querySelectorAll('.admin-section').forEach(s => s.classList.toggle('active', s.id === 'admin-' + tab));
+  if (tab === 'accounts') renderAccountTable();
+  if (tab === 'content')  renderContentEditor();
+  if (tab === 'jobs')     renderJobsEditor();
+}
+
+// --- ACCOUNT MANAGEMENT ---
+function renderAccountTable() {
+  const accs = App.getAccounts();
+  const tbody = document.getElementById('accountTableBody');
+  tbody.innerHTML = accs.map((a, i) => `
+    <tr>
+      <td>${a.username}</td>
+      <td>${a.role === 'admin' ? '<span class="pill-admin">Admin</span>' : '<span class="pill-user">Staff</span>'}</td>
+      <td>${new Date(a.created).toLocaleDateString()}</td>
+      <td>
+        ${a.username !== 'Ruger' ? `
+          <button class="btn btn-outline btn-sm" onclick="openEditAccount(${i})">Edit</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteAccount(${i})" style="margin-left:.4rem">Delete</button>
+        ` : '<span style="color:var(--gray-400);font-size:.85rem">Protected</span>'}
+      </td>
+    </tr>
+  `).join('');
+}
+
+function openCreateAccount() {
+  document.getElementById('accountModalTitle').textContent = 'Create Account';
+  document.getElementById('accEditIndex').value = '';
+  document.getElementById('newAccUser').value = '';
+  document.getElementById('newAccPass').value = '';
+  document.getElementById('newAccRole').value = 'staff';
+  document.getElementById('accountModal').style.display = 'flex';
+}
+
+function openEditAccount(i) {
+  const a = App.getAccounts()[i];
+  document.getElementById('accountModalTitle').textContent = 'Edit Account';
+  document.getElementById('accEditIndex').value = i;
+  document.getElementById('newAccUser').value = a.username;
+  document.getElementById('newAccPass').value = a.password;
+  document.getElementById('newAccRole').value = a.role;
+  document.getElementById('accountModal').style.display = 'flex';
+}
+
+function closeAccountModal() {
+  document.getElementById('accountModal').style.display = 'none';
+}
+
+function saveAccount() {
+  const idx = document.getElementById('accEditIndex').value;
+  const username = document.getElementById('newAccUser').value.trim();
+  const password = document.getElementById('newAccPass').value.trim();
+  const role     = document.getElementById('newAccRole').value;
+
+  if (!username || !password) { showToast('Username and password are required.', 'error'); return; }
+
+  const accs = App.getAccounts();
+  if (idx === '') {
+    // create
+    if (accs.find(a => a.username.toLowerCase() === username.toLowerCase())) {
+      showToast('Username already exists.', 'error'); return;
+    }
+    accs.push({ username, password, role, created: new Date().toISOString() });
+    showToast(`Account "${username}" created.`, 'success');
+  } else {
+    const i = parseInt(idx);
+    if (accs[i].username === 'Ruger') { showToast('Cannot edit protected account.', 'error'); return; }
+    accs[i] = { ...accs[i], username, password, role };
+    showToast(`Account "${username}" updated.`, 'success');
+  }
+  App.saveAccounts(accs);
+  closeAccountModal();
+  renderAccountTable();
+}
+
+function deleteAccount(i) {
+  const accs = App.getAccounts();
+  if (accs[i].username === 'Ruger') { showToast('Cannot delete admin account.', 'error'); return; }
+  if (!confirm(`Delete account "${accs[i].username}"? This cannot be undone.`)) return;
+  accs.splice(i, 1);
+  App.saveAccounts(accs);
+  renderAccountTable();
+  showToast('Account deleted.');
+}
+
+// --- CONTENT EDITOR ---
+function renderContentEditor() {
+  const c = App.getContent();
+  // Mission
+  document.getElementById('ce-missionHero').value  = c.mission.hero;
+  document.getElementById('ce-missionSub').value   = c.mission.sub;
+  document.getElementById('ce-missionBody1').value = c.mission.body1;
+  document.getElementById('ce-missionBody2').value = c.mission.body2;
+  document.getElementById('ce-val1').value  = c.mission.value1;
+  document.getElementById('ce-val1d').value = c.mission.value1d;
+  document.getElementById('ce-val2').value  = c.mission.value2;
+  document.getElementById('ce-val2d').value = c.mission.value2d;
+  document.getElementById('ce-val3').value  = c.mission.value3;
+  document.getElementById('ce-val3d').value = c.mission.value3d;
+  document.getElementById('ce-val4').value  = c.mission.value4;
+  document.getElementById('ce-val4d').value = c.mission.value4d;
+  // About
+  document.getElementById('ce-aboutHero').value  = c.about.hero;
+  document.getElementById('ce-aboutSub').value   = c.about.sub;
+  document.getElementById('ce-aboutIntro').value = c.about.intro;
+  document.getElementById('ce-s2title').value = c.about.s2title;
+  document.getElementById('ce-s2body').value  = c.about.s2body;
+  document.getElementById('ce-s3title').value = c.about.s3title;
+  document.getElementById('ce-s3body').value  = c.about.s3body;
+  document.getElementById('ce-stat1').value  = c.about.stat1;
+  document.getElementById('ce-stat1l').value = c.about.stat1l;
+  document.getElementById('ce-stat2').value  = c.about.stat2;
+  document.getElementById('ce-stat2l').value = c.about.stat2l;
+  document.getElementById('ce-stat3').value  = c.about.stat3;
+  document.getElementById('ce-stat3l').value = c.about.stat3l;
+  // Policy
+  document.getElementById('ce-policyHero').value    = c.policy.hero;
+  document.getElementById('ce-policySub').value     = c.policy.sub;
+  document.getElementById('ce-policyUpdated').value = c.policy.updated;
+}
+
+function saveContent() {
+  const c = App.getContent();
+  c.mission.hero   = document.getElementById('ce-missionHero').value;
+  c.mission.sub    = document.getElementById('ce-missionSub').value;
+  c.mission.body1  = document.getElementById('ce-missionBody1').value;
+  c.mission.body2  = document.getElementById('ce-missionBody2').value;
+  c.mission.value1 = document.getElementById('ce-val1').value;
+  c.mission.value1d= document.getElementById('ce-val1d').value;
+  c.mission.value2 = document.getElementById('ce-val2').value;
+  c.mission.value2d= document.getElementById('ce-val2d').value;
+  c.mission.value3 = document.getElementById('ce-val3').value;
+  c.mission.value3d= document.getElementById('ce-val3d').value;
+  c.mission.value4 = document.getElementById('ce-val4').value;
+  c.mission.value4d= document.getElementById('ce-val4d').value;
+  c.about.hero   = document.getElementById('ce-aboutHero').value;
+  c.about.sub    = document.getElementById('ce-aboutSub').value;
+  c.about.intro  = document.getElementById('ce-aboutIntro').value;
+  c.about.s2title= document.getElementById('ce-s2title').value;
+  c.about.s2body = document.getElementById('ce-s2body').value;
+  c.about.s3title= document.getElementById('ce-s3title').value;
+  c.about.s3body = document.getElementById('ce-s3body').value;
+  c.about.stat1  = document.getElementById('ce-stat1').value;
+  c.about.stat1l = document.getElementById('ce-stat1l').value;
+  c.about.stat2  = document.getElementById('ce-stat2').value;
+  c.about.stat2l = document.getElementById('ce-stat2l').value;
+  c.about.stat3  = document.getElementById('ce-stat3').value;
+  c.about.stat3l = document.getElementById('ce-stat3l').value;
+  c.policy.hero    = document.getElementById('ce-policyHero').value;
+  c.policy.sub     = document.getElementById('ce-policySub').value;
+  c.policy.updated = document.getElementById('ce-policyUpdated').value;
+  App.saveContent(c);
+  showToast('Content saved successfully.', 'success');
+}
+
+// --- JOBS EDITOR ---
+let editingJobIdx = null;
+
+function renderJobsEditor() {
+  const jobs = App.getJobs();
+  const list = document.getElementById('adminJobList');
+  list.innerHTML = jobs.map((j, i) => `
+    <div class="job-card" style="margin-top:1rem">
+      <div class="job-icon">💼</div>
+      <div class="job-info">
+        <h3>${j.title}</h3>
+        <p>${j.desc}</p>
+        <span class="tag">${j.dept}</span>
+        <span class="tag">${j.type}</span>
+        <span class="tag">${j.location}</span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:.4rem;flex-shrink:0">
+        <button class="btn btn-outline btn-sm" onclick="openEditJob(${i})">Edit</button>
+        <button class="btn btn-danger btn-sm"  onclick="deleteJob(${i})">Remove</button>
+      </div>
+    </div>
+  `).join('');
+  clearJobForm();
+}
+
+function openEditJob(i) {
+  editingJobIdx = i;
+  const j = App.getJobs()[i];
+  document.getElementById('jobFormTitle').textContent = 'Edit Position';
+  document.getElementById('jTitle').value    = j.title;
+  document.getElementById('jDept').value     = j.dept;
+  document.getElementById('jType').value     = j.type;
+  document.getElementById('jLocation').value = j.location;
+  document.getElementById('jDesc').value     = j.desc;
+  document.getElementById('jobForm').scrollIntoView({ behavior: 'smooth' });
+}
+
+function clearJobForm() {
+  editingJobIdx = null;
+  document.getElementById('jobFormTitle').textContent = 'Add New Position';
+  document.getElementById('jTitle').value    = '';
+  document.getElementById('jDept').value     = '';
+  document.getElementById('jType').value     = 'Full-time';
+  document.getElementById('jLocation').value = 'Remote';
+  document.getElementById('jDesc').value     = '';
+}
+
+function saveJob() {
+  const title    = document.getElementById('jTitle').value.trim();
+  const dept     = document.getElementById('jDept').value.trim();
+  const type     = document.getElementById('jType').value;
+  const location = document.getElementById('jLocation').value;
+  const desc     = document.getElementById('jDesc').value.trim();
+  if (!title || !dept || !desc) { showToast('Title, department, and description are required.', 'error'); return; }
+  const jobs = App.getJobs();
+  if (editingJobIdx !== null) {
+    jobs[editingJobIdx] = { ...jobs[editingJobIdx], title, dept, type, location, desc };
+    showToast('Position updated.', 'success');
+  } else {
+    const id = Date.now();
+    jobs.push({ id, title, dept, type, location, desc });
+    showToast('Position added.', 'success');
+  }
+  App.saveJobs(jobs);
+  renderJobsEditor();
+}
+
+function deleteJob(i) {
+  const jobs = App.getJobs();
+  if (!confirm(`Remove "${jobs[i].title}"?`)) return;
+  jobs.splice(i, 1);
+  App.saveJobs(jobs);
+  renderJobsEditor();
+  showToast('Position removed.');
+}
+
+// ============================================================
+//  INIT
+// ============================================================
+document.addEventListener('DOMContentLoaded', () => {
+  App.initAccounts();
+  const session = App.getSession();
+  updateNavbar();
+  if (session) {
+    renderMission();
+    showPage('mission-page');
+  } else {
+    showPage('login-page');
+  }
+});
